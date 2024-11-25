@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dev-environment
+  labels:
+    app: dev-environment
+spec:
+  containers:
+  - name: nginx
+    image: nginx:latest
+    ports:
+    - containerPort: 80
+      hostPort: 8080
+    volumeMounts:
+    - name: nginx-config
+      mountPath: /etc/nginx/conf.d
+    - name: shared-files
+      mountPath: /var/www/html
+      
+  - name: php-fpm
+    image: php:8.2-fpm
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        apt-get update && apt-get install -y \
+            libpq-dev \
+            libzip-dev \
+            libpng-dev \
+            libjpeg-dev \
+            libfreetype6-dev \
+            libonig-dev \
+            git \
+            unzip \
+            && docker-php-ext-configure gd --with-freetype --with-jpeg \
+            && docker-php-ext-install -j$(nproc) \
+                pdo \
+                pdo_pgsql \
+                pgsql \
+                zip \
+                gd \
+                mbstring \
+                opcache \
+            && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+            && chmod +x /usr/local/bin/composer \
+            && php-fpm
+    volumeMounts:
+    - name: shared-files
+      mountPath: /var/www/html
+    - name: php-config
+      mountPath: /usr/local/etc/php/conf.d
+    - name: composer-cache
+      mountPath: /root/.composer
+    
+  - name: postgres
+    image: postgres:latest
+    env:
+    - name: POSTGRES_PASSWORD
+      value: devpassword
+    - name: POSTGRES_USER
+      value: devuser
+    - name: POSTGRES_DB
+      value: devdb
+    ports:
+    - containerPort: 5432
+      hostPort: 5432
+    volumeMounts:
+    - name: postgres-data
+      mountPath: /var/lib/postgresql/data
+      
+  volumes:
+  - name: nginx-config
+    hostPath:
+      path: ./config/nginx
+      type: Directory
+  - name: shared-files
+    hostPath:
+      path: ./www
+      type: Directory
+  - name: postgres-data
+    hostPath:
+      path: ./data/postgres
+      type: Directory
+  - name: php-config
+    hostPath:
+      path: ./config/php
+      type: Directory
+  - name: composer-cache
+    hostPath:
+      path: ./data/composer
+      type: Directory
